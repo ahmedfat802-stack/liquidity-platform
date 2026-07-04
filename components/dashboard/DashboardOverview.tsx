@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useCustomers } from '@/hooks/useCustomers'
 import { useInvoices } from '@/hooks/useInvoices'
 import { useProducts } from '@/hooks/useProducts'
-import { formatCurrency, daysUntilDue } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
 
 /**
  * مكون نظرة عامة على لوحة التحكم
@@ -20,7 +20,7 @@ import { formatCurrency, daysUntilDue } from '@/lib/utils'
 const DashboardOverview: FC = () => {
   const { customers } = useCustomers()
   const { invoices, getOverdueInvoices, getUpcomingInvoices } = useInvoices()
-  const { products, getOutOfStockProducts, getLowStockProducts } = useProducts()
+  const { getOutOfStockProducts, getLowStockProducts } = useProducts()
 
   // ========== Calculations ==========
 

@@ -10,8 +10,8 @@
 import { useCallback, useState, useEffect } from 'react'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { useCurrentUser } from '@/store/authStore'
-import { calculateInvoiceStatus, daysUntilDue } from '@/lib/utils'
-import type { Invoice, InvoiceFormData, InvoiceItem, ApiResponse } from '@/types'
+import { daysUntilDue } from '@/lib/utils'
+import type { Invoice, InvoiceFormData, ApiResponse } from '@/types'
 
 /**
  * Hook useInvoices

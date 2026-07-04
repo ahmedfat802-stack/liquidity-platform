@@ -21,7 +21,6 @@ export default function InvoicesPage() {
     deleteInvoice,
     markAsPaid,
     searchInvoices,
-    filterByStatus,
     getOverdueInvoices,
   } = useInvoices()
 

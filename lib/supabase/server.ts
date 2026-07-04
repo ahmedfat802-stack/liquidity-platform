@@ -8,7 +8,7 @@
  * - Server Actions
  */
 
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient as createSSRServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
 /**
@@ -22,13 +22,13 @@ import { cookies } from 'next/headers'
  * @returns Supabase Server Client instance
  * 
  * @example
- * const supabase = createServerClient()
+ * const supabase = getSupabaseServerClient()
  * const { data, error } = await supabase.from('customers').select()
  */
-export function createServerClient() {
+export function getSupabaseServerClient() {
   const cookieStore = cookies()
 
-  return createServerClient(
+  return createSSRServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -47,7 +47,7 @@ export function createServerClient() {
           try {
             cookieStore.set(name, value, options)
           } catch (error) {
-            // معالجة الأخطاء (قد تحدث في بعض الحالات)
+            // معالجة الأخطاء (قد تحدث في Server Components)
             console.error('خطأ في تعيين الـ Cookie:', error)
           }
         },

@@ -6,7 +6,7 @@
 
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { format, formatDistanceToNow, isAfter, isBefore, differenceInDays } from 'date-fns'
+import { format, formatDistanceToNow, isBefore, differenceInDays } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { CURRENCY, DATE_FORMATS, INVOICE_THRESHOLDS } from './constants'
 

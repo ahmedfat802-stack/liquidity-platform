@@ -10,7 +10,7 @@ import { useCallback, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/store/authStore'
-import type { LoginData, RegisterData, User } from '@/types'
+import type { LoginData, RegisterData } from '@/types'
 
 /**
  * Hook useAuth
