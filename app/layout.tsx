@@ -1,27 +1,27 @@
 /**
  * التخطيط الرئيسي للتطبيق
- * 
- * هذا الملف يحتوي على:
- * - إعدادات الـ HTML الأساسية
- * - المتغيرات الأساسية
- * - المكونات العامة (مثل الإشعارات)
+ * يحتوي على إعدادات HTML الأساسية والـ Metadata والـ Fonts
  */
 
 import type { Metadata, Viewport } from 'next'
+import { Cairo } from 'next/font/google'
 import { APP_NAME, APP_DESCRIPTION } from '@/lib/constants'
 import '@/styles/globals.css'
 
-/**
- * إعدادات الـ Viewport - يجب أن تكون منفصلة عن metadata في Next.js 14+
- */
+// ========== Fonts ==========
+const cairo = Cairo({
+  subsets: ['arabic', 'latin'],
+  variable: '--font-cairo',
+  display: 'swap',
+})
+
+// ========== Viewport ==========
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
 }
 
-/**
- * بيانات الـ SEO للموقع
- */
+// ========== Metadata ==========
 export const metadata: Metadata = {
   title: APP_NAME,
   description: APP_DESCRIPTION,
@@ -30,35 +30,11 @@ export const metadata: Metadata = {
   },
 }
 
-/**
- * Props للتخطيط الرئيسي
- */
-interface RootLayoutProps {
-  children: React.ReactNode
-}
-
-/**
- * التخطيط الرئيسي
- * 
- * يحتوي على:
- * - إعدادات HTML الأساسية
- * - المتغيرات العامة
- * - المكونات العامة
- */
-export default function RootLayout({ children }: RootLayoutProps) {
+// ========== Root Layout ==========
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl">
-      <head>
-        {/* الخطوط */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Cairo:wght@200;300;400;500;600;700;800;900&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body>
-        {/* المحتوى الرئيسي */}
+    <html lang="ar" dir="rtl" className={cairo.variable}>
+      <body className="font-sans antialiased bg-background text-foreground">
         {children}
       </body>
     </html>

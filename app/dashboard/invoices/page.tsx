@@ -1,146 +1,88 @@
-/**
- * صفحة قائمة الفواتير
- */
-
 'use client'
-
-import React, { useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { useInvoices } from '@/hooks/useInvoices'
-import InvoiceTable from '@/components/invoices/InvoiceTable'
-import { formatCurrency } from '@/lib/utils'
-import type { Invoice } from '@/types'
+import { Plus, Search, Clock, CheckCircle, AlertTriangle, MoreVertical, FileText } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
-/**
- * صفحة الفواتير
- */
+const mockInvoices = [
+  { id: 1, customer: 'أحمد محمد', amount: 3500, issueDate: '٢٠٢٤/١/١', dueDate: '٢٠٢٤/١/١٥', status: 'pending', daysLeft: 2 },
+  { id: 2, customer: 'سارة أحمد', amount: 1800, issueDate: '٢٠٢٤/١/٣', dueDate: '٢٠٢٤/١/١٨', status: 'pending', daysLeft: 5 },
+  { id: 3, customer: 'محمد علي', amount: 5200, issueDate: '٢٠٢٣/١٢/١', dueDate: '٢٠٢٤/١/١', status: 'overdue', daysLeft: -3 },
+  { id: 4, customer: 'فاطمة حسن', amount: 900, issueDate: '٢٠٢٤/١/٥', dueDate: '٢٠٢٤/١/٢٢', status: 'upcoming', daysLeft: 9 },
+  { id: 5, customer: 'عمر خالد', amount: 2200, issueDate: '٢٠٢٣/١٢/١٥', dueDate: '٢٠٢٤/١/١٠', status: 'paid', daysLeft: 0 },
+]
+const statusConfig = {
+  pending: { label: 'مستحق قريباً', class: 'bg-amber-100 text-amber-700 border-amber-200', icon: Clock },
+  overdue: { label: 'متأخر', class: 'bg-red-100 text-red-700 border-red-200', icon: AlertTriangle },
+  upcoming: { label: 'قادم', class: 'bg-blue-100 text-blue-700 border-blue-200', icon: Clock },
+  paid: { label: 'مدفوع', class: 'bg-emerald-100 text-emerald-700 border-emerald-200', icon: CheckCircle },
+}
 export default function InvoicesPage() {
-  const {
-    invoices,
-    isLoading,
-    deleteInvoice,
-    markAsPaid,
-    searchInvoices,
-    getOverdueInvoices,
-  } = useInvoices()
-
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
-
-  // ========== Handlers ==========
-
-  const handleDelete = async (id: string) => {
-    const response = await deleteInvoice(id)
-    if (response.status === 200) {
-      // سيتم تحديث القائمة تلقائياً
-    }
-  }
-
-  const handleMarkPaid = async (id: string) => {
-    const invoice = invoices.find((inv) => inv.id === id)
-    if (invoice) {
-      await markAsPaid(id, invoice.totalAmount)
-    }
-  }
-
-  const handleEdit = (invoice: Invoice) => {
-    console.log('تعديل الفاتورة:', invoice)
-  }
-
-  // ========== Calculations ==========
-
-  let filteredInvoices = searchQuery ? searchInvoices(searchQuery) : invoices
-
-  if (statusFilter !== 'all') {
-    filteredInvoices = filteredInvoices.filter((inv) => inv.status === statusFilter)
-  }
-
-  const totalAmount = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0)
-  const totalPaid = invoices.reduce((sum, inv) => sum + inv.paidAmount, 0)
-  const totalPending = totalAmount - totalPaid
-  const overdueCount = getOverdueInvoices().length
-
-  // ========== Render ==========
-
+  const [search, setSearch] = useState('')
+  const [tab, setTab] = useState('all')
+  const filtered = mockInvoices.filter(inv => {
+    const matchSearch = inv.customer.includes(search)
+    const matchTab = tab === 'all' || inv.status === tab
+    return matchSearch && matchTab
+  })
+  const totalPending = mockInvoices.filter(i => i.status !== 'paid').reduce((s, i) => s + i.amount, 0)
+  const overdueCount = mockInvoices.filter(i => i.status === 'overdue').length
   return (
-    <main className="space-y-6">
-      {/* الرأس */}
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">الفواتير</h1>
-          <p className="text-muted mt-2">إدارة الفواتير والمستحقات</p>
-        </div>
-        <Link href="/dashboard/invoices/new" className="btn btn-primary">
-          + إضافة فاتورة جديدة
-        </Link>
+        <div><h1 className="text-2xl font-bold text-foreground">الفواتير</h1><p className="text-muted-foreground text-sm mt-0.5">{mockInvoices.length} فاتورة مسجلة</p></div>
+        <Button asChild className="gap-2 shadow-sm"><Link href="/dashboard/invoices/new"><Plus className="w-4 h-4" />فاتورة جديدة</Link></Button>
       </div>
-
-      {/* الإحصائيات */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="card">
-          <p className="text-muted text-sm">إجمالي الفواتير</p>
-          <p className="text-2xl font-bold">{formatCurrency(totalAmount)}</p>
-        </div>
-        <div className="card">
-          <p className="text-muted text-sm">المدفوع</p>
-          <p className="text-2xl font-bold text-secondary">{formatCurrency(totalPaid)}</p>
-        </div>
-        <div className="card">
-          <p className="text-muted text-sm">المستحقات</p>
-          <p className="text-2xl font-bold text-warning">{formatCurrency(totalPending)}</p>
-        </div>
-        <div className="card">
-          <p className="text-muted text-sm">متأخرة</p>
-          <p className="text-2xl font-bold text-destructive">{overdueCount}</p>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="border border-border shadow-sm"><CardContent className="p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center"><FileText className="w-5 h-5 text-amber-600" /></div><div><p className="text-xl font-bold">{totalPending.toLocaleString()} ج.م</p><p className="text-xs text-muted-foreground">إجمالي المستحق</p></div></CardContent></Card>
+        <Card className="border border-border shadow-sm"><CardContent className="p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-red-600" /></div><div><p className="text-xl font-bold">{overdueCount}</p><p className="text-xs text-muted-foreground">فواتير متأخرة</p></div></CardContent></Card>
+        <Card className="border border-border shadow-sm"><CardContent className="p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center"><CheckCircle className="w-5 h-5 text-emerald-600" /></div><div><p className="text-xl font-bold">{mockInvoices.filter(i => i.status === 'paid').length}</p><p className="text-xs text-muted-foreground">فواتير مدفوعة</p></div></CardContent></Card>
       </div>
-
-      {/* البحث والتصفية */}
-      <div className="card space-y-4">
-        <input
-          type="text"
-          placeholder="ابحث عن فاتورة..."
-          className="input"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setStatusFilter('all')}
-            className={`btn ${statusFilter === 'all' ? 'btn-primary' : 'btn-outline'}`}
-          >
-            الكل
-          </button>
-          <button
-            onClick={() => setStatusFilter('pending')}
-            className={`btn ${statusFilter === 'pending' ? 'btn-primary' : 'btn-outline'}`}
-          >
-            معلقة
-          </button>
-          <button
-            onClick={() => setStatusFilter('paid')}
-            className={`btn ${statusFilter === 'paid' ? 'btn-primary' : 'btn-outline'}`}
-          >
-            مدفوعة
-          </button>
-          <button
-            onClick={() => setStatusFilter('overdue')}
-            className={`btn ${statusFilter === 'overdue' ? 'btn-primary' : 'btn-outline'}`}
-          >
-            متأخرة
-          </button>
-        </div>
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1"><Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="ابحث باسم العميل..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-10 h-11 bg-card" /></div>
+        <Tabs value={tab} onValueChange={setTab}><TabsList className="h-11"><TabsTrigger value="all">الكل</TabsTrigger><TabsTrigger value="overdue">متأخر</TabsTrigger><TabsTrigger value="pending">قريب</TabsTrigger><TabsTrigger value="paid">مدفوع</TabsTrigger></TabsList></Tabs>
       </div>
-
-      {/* الجدول */}
-      <InvoiceTable
-        invoices={filteredInvoices}
-        isLoading={isLoading}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
-        onMarkPaid={handleMarkPaid}
-      />
-    </main>
+      <div className="space-y-3">
+        {filtered.length === 0 ? (
+          <Card className="border border-border"><CardContent className="p-12 text-center"><FileText className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" /><p className="text-muted-foreground">لا توجد فواتير</p></CardContent></Card>
+        ) : filtered.map((invoice) => {
+          const config = statusConfig[invoice.status as keyof typeof statusConfig]
+          return (
+            <Card key={invoice.id} className="border border-border shadow-sm hover:shadow-md transition-all">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"><span className="text-sm font-bold text-primary">{invoice.customer[0]}</span></div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-semibold text-foreground text-sm">{invoice.customer}</p>
+                      <Badge variant="outline" className={`text-xs ${config.class}`}>{config.label}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">تاريخ الإصدار: {invoice.issueDate} · الاستحقاق: {invoice.dueDate}</p>
+                  </div>
+                  <div className="text-left flex-shrink-0">
+                    <p className="text-base font-bold text-foreground">{invoice.amount.toLocaleString()} ج.م</p>
+                    {invoice.status === 'overdue' && <p className="text-xs text-red-600">متأخر {Math.abs(invoice.daysLeft)} أيام</p>}
+                    {invoice.status === 'pending' && <p className="text-xs text-amber-600">يستحق بعد {invoice.daysLeft} أيام</p>}
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="w-8 h-8 flex-shrink-0"><MoreVertical className="w-4 h-4" /></Button></DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>تعليم كمدفوع</DropdownMenuItem>
+                      <DropdownMenuItem>تعديل</DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive">حذف</DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+    </div>
   )
 }

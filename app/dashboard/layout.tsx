@@ -1,30 +1,23 @@
-/**
- * تخطيط لوحة التحكم - Server Component
- * 
- * ملاحظة: هذا الملف Server Component عمداً
- * الـ 'use client' موجود في مكونات منفصلة (SidebarClient, HeaderClient)
- * لتجنب مشكلة client-reference-manifest على Vercel
- */
-
-import React, { ReactNode, Suspense } from 'react'
-import DashboardLayoutClient from '@/components/dashboard/DashboardLayoutClient'
+'use client'
 
 /**
- * تخطيط لوحة التحكم الرئيسي
+ * Dashboard Layout - تخطيط لوحة التحكم
+ * يحتوي على Sidebar + المحتوى الرئيسي
  */
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+
+import Sidebar from '@/components/layout/Sidebar'
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-primary mb-2">💰 Liquidity</div>
-          <p className="text-muted-foreground">جاري التحميل...</p>
+    <div className="flex min-h-screen bg-background" dir="rtl">
+      <Sidebar />
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="flex-1 p-6 lg:p-8 overflow-y-auto">
+          <div className="max-w-7xl mx-auto animate-fade-in">
+            {children}
+          </div>
         </div>
-      </div>
-    }>
-      <DashboardLayoutClient>
-        {children}
-      </DashboardLayoutClient>
-    </Suspense>
+      </main>
+    </div>
   )
 }
