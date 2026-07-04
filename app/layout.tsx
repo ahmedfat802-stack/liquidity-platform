@@ -7,9 +7,17 @@
  * - المكونات العامة (مثل الإشعارات)
  */
 
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { APP_NAME, APP_DESCRIPTION } from '@/lib/constants'
 import '@/styles/globals.css'
+
+/**
+ * إعدادات الـ Viewport - يجب أن تكون منفصلة عن metadata في Next.js 14+
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+}
 
 /**
  * بيانات الـ SEO للموقع
@@ -17,7 +25,6 @@ import '@/styles/globals.css'
 export const metadata: Metadata = {
   title: APP_NAME,
   description: APP_DESCRIPTION,
-  viewport: 'width=device-width, initial-scale=1',
   icons: {
     icon: '/favicon.ico',
   },
@@ -53,9 +60,6 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <body>
         {/* المحتوى الرئيسي */}
         {children}
-
-        {/* Toaster للإشعارات (سيتم إضافته لاحقاً) */}
-        {/* <Toaster /> */}
       </body>
     </html>
   )
