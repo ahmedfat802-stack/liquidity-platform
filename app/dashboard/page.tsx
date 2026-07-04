@@ -1,263 +1,329 @@
 'use client'
 
 /**
- * صفحة لوحة التحكم الرئيسية
- * تعرض: السيولة الحالية، الفواتير المستحقة، التنبيهات، والإحصائيات
+ * =====================================================================
+ * لوحة التحكم الرئيسية — منصة "سيولة"
+ * =====================================================================
+ * - تعرض بيانات حقيقية من Supabase عبر lib/data.ts (fetchDashboardStats)
+ * - كروت إحصائيات + تنبيهات ذكية + الفواتير القريبة/المتأخرة + إجراءات سريعة
+ * - قاعدة ثابتة: لا استعلامات Supabase مباشرة هنا — كل شيء عبر lib/data.ts
+ * =====================================================================
  */
 
-import { TrendingUp, Users, FileText, Package, AlertTriangle, Clock, CheckCircle, ArrowUpRight } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import {
+  Users,
+  FileText,
+  AlertTriangle,
+  Wallet,
+  Package,
+  Plus,
+  ArrowLeft,
+  Clock,
+  Loader2,
+} from 'lucide-react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { fetchDashboardStats, type DashboardStats } from '@/lib/data'
+import { formatCurrency } from '@/lib/utils'
 
-// بيانات تجريبية - ستُستبدل بـ Supabase
-const stats = [
-  {
-    title: 'السيولة المتاحة',
-    value: '٢٤,٥٠٠ ج.م',
-    change: '+١٢٪',
-    trend: 'up',
-    icon: TrendingUp,
-    color: 'text-emerald-600',
-    bg: 'bg-emerald-50',
-    description: 'النقدي في الخزنة',
-  },
-  {
-    title: 'فلوس عند العملاء',
-    value: '٨٧,٢٠٠ ج.م',
-    change: '+٥ فواتير',
-    trend: 'neutral',
-    icon: Users,
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
-    description: 'إجمالي الآجل',
-  },
-  {
-    title: 'فواتير مستحقة',
-    value: '١٢ فاتورة',
-    change: 'هذا الأسبوع',
-    trend: 'warning',
-    icon: FileText,
-    color: 'text-amber-600',
-    bg: 'bg-amber-50',
-    description: 'تستحق خلال ٧ أيام',
-  },
-  {
-    title: 'منتجات قليلة',
-    value: '٣ منتجات',
-    change: 'تحت الحد',
-    trend: 'down',
-    icon: Package,
-    color: 'text-red-600',
-    bg: 'bg-red-50',
-    description: 'تحتاج إعادة تخزين',
-  },
-]
-
-const alerts = [
-  {
-    type: 'danger',
-    title: 'تحذير سيولة',
-    message: 'السيولة المتاحة أقل من ١٠,٠٠٠ ج.م - قد لا تتمكن من شراء بضاعة جديدة',
-    icon: AlertTriangle,
-    time: 'الآن',
-  },
-  {
-    type: 'warning',
-    title: 'فاتورة مستحقة',
-    message: 'فاتورة أحمد محمد (٣,٥٠٠ ج.م) تستحق خلال يومين',
-    icon: Clock,
-    time: 'منذ ساعة',
-  },
-  {
-    type: 'success',
-    title: 'تم السداد',
-    message: 'سدد محمد علي فاتورة بقيمة ٢,٢٠٠ ج.م',
-    icon: CheckCircle,
-    time: 'منذ ٣ ساعات',
-  },
-]
-
-const recentInvoices = [
-  { customer: 'أحمد محمد', amount: '٣,٥٠٠', dueDate: 'بعد يومين', status: 'pending' },
-  { customer: 'سارة أحمد', amount: '١,٨٠٠', dueDate: 'بعد ٥ أيام', status: 'pending' },
-  { customer: 'محمد علي', amount: '٥,٢٠٠', dueDate: 'متأخر ٣ أيام', status: 'overdue' },
-  { customer: 'فاطمة حسن', amount: '٩٠٠', dueDate: 'بعد أسبوع', status: 'upcoming' },
-]
-
-const statusConfig = {
-  pending: { label: 'مستحق قريباً', class: 'bg-amber-100 text-amber-700 border-amber-200' },
-  overdue: { label: 'متأخر', class: 'bg-red-100 text-red-700 border-red-200' },
-  upcoming: { label: 'قادم', class: 'bg-blue-100 text-blue-700 border-blue-200' },
-  paid: { label: 'مدفوع', class: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
+/** حساب عدد الأيام المتبقية حتى تاريخ الاستحقاق */
+function daysUntil(dateStr: string): number {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const due = new Date(dateStr)
+  due.setHours(0, 0, 0, 0)
+  return Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 }
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchDashboardStats().then(({ data, error }) => {
+      setStats(data)
+      setError(error)
+      setLoading(false)
+    })
+  }, [])
+
+  /* ------------------------- حالة التحميل ------------------------- */
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground text-sm">جاري تحميل بياناتك...</p>
+      </div>
+    )
+  }
+
+  /* ------------------------- حالة الخطأ ------------------------- */
+  if (error || !stats) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 gap-4">
+        <AlertTriangle className="w-8 h-8 text-destructive" />
+        <p className="text-muted-foreground">حدث خطأ أثناء تحميل البيانات: {error}</p>
+        <Button onClick={() => location.reload()}>إعادة المحاولة</Button>
+      </div>
+    )
+  }
+
+  const alertsCount =
+    stats.overdueInvoices.length + stats.dueSoonInvoices.length + stats.lowStockProducts.length
+
+  const statCards = [
+    {
+      title: 'فلوسك عند العملاء',
+      value: formatCurrency(stats.totalReceivables),
+      icon: Wallet,
+      color: 'text-blue-600',
+      bg: 'bg-blue-50',
+      hint: 'إجمالي الآجل غير المسدد',
+    },
+    {
+      title: 'فواتير غير مدفوعة',
+      value: String(stats.pendingInvoicesCount),
+      icon: FileText,
+      color: 'text-amber-600',
+      bg: 'bg-amber-50',
+      hint: `${stats.overdueInvoices.length} منها متأخرة`,
+    },
+    {
+      title: 'عدد العملاء',
+      value: String(stats.customersCount),
+      icon: Users,
+      color: 'text-emerald-600',
+      bg: 'bg-emerald-50',
+      hint: 'إجمالي عملاء الآجل',
+    },
+    {
+      title: 'تنبيهات نشطة',
+      value: String(alertsCount),
+      icon: AlertTriangle,
+      color: 'text-red-600',
+      bg: 'bg-red-50',
+      hint: 'تحتاج إلى انتباهك',
+    },
+  ]
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-8">
+      {/* العنوان */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">لوحة التحكم</h1>
-          <p className="text-muted-foreground text-sm mt-0.5">مرحباً بك، هذه نظرة عامة على وضعك المالي</p>
+          <p className="text-muted-foreground mt-1.5 text-sm">
+            نظرة شاملة على سيولتك وفلوسك عند العملاء
+          </p>
         </div>
-        <div className="text-sm text-muted-foreground bg-card border border-border rounded-lg px-3 py-1.5">
-          {new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+        <div className="flex gap-3">
+          <Button asChild>
+            <Link href="/dashboard/invoices/new">
+              <Plus className="w-4 h-4 ml-2" />
+              فاتورة جديدة
+            </Link>
+          </Button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.title} className="border border-border shadow-sm hover:shadow-md transition-shadow">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center`}>
-                  <stat.icon className={`w-5 h-5 ${stat.color}`} />
+      {/* كروت الإحصائيات */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+        {statCards.map((card) => (
+          <Card key={card.title} className="shadow-sm hover:shadow-md transition-shadow">
+            <CardContent className="p-6">
+              <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">{card.title}</p>
+                  <p className="text-2xl font-bold text-foreground">{card.value}</p>
+                  <p className="text-xs text-muted-foreground">{card.hint}</p>
                 </div>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                  stat.trend === 'up' ? 'bg-emerald-100 text-emerald-700' :
-                  stat.trend === 'down' ? 'bg-red-100 text-red-700' :
-                  stat.trend === 'warning' ? 'bg-amber-100 text-amber-700' :
-                  'bg-blue-100 text-blue-700'
-                }`}>
-                  {stat.change}
-                </span>
+                <div className={`w-11 h-11 rounded-xl ${card.bg} flex items-center justify-center`}>
+                  <card.icon className={`w-5 h-5 ${card.color}`} />
+                </div>
               </div>
-              <p className="text-2xl font-bold text-foreground mb-0.5">{stat.value}</p>
-              <p className="text-sm font-medium text-foreground/80">{stat.title}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{stat.description}</p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Main Content Grid */}
+      {/* التنبيهات الذكية */}
+      {alertsCount > 0 && (
+        <Card className="shadow-sm border-amber-200 bg-amber-50/40">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              التنبيهات الذكية
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {stats.overdueInvoices.map((inv) => (
+              <div
+                key={inv.id}
+                className="flex items-center justify-between gap-4 p-4 rounded-lg bg-red-50 border border-red-100"
+              >
+                <div className="flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-900">
+                    فاتورة <span className="font-bold">{inv.invoice_number}</span> للعميل{' '}
+                    <span className="font-bold">{inv.customers?.name ?? '—'}</span> متأخرة{' '}
+                    {Math.abs(daysUntil(inv.due_date))} يوم — المتبقي{' '}
+                    {formatCurrency(Number(inv.total_amount) - Number(inv.paid_amount))}
+                  </p>
+                </div>
+                <Badge variant="destructive">متأخرة</Badge>
+              </div>
+            ))}
+            {stats.dueSoonInvoices.map((inv) => (
+              <div
+                key={inv.id}
+                className="flex items-center justify-between gap-4 p-4 rounded-lg bg-amber-50 border border-amber-100"
+              >
+                <div className="flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <p className="text-sm text-amber-900">
+                    فاتورة <span className="font-bold">{inv.invoice_number}</span> للعميل{' '}
+                    <span className="font-bold">{inv.customers?.name ?? '—'}</span> تستحق خلال{' '}
+                    {daysUntil(inv.due_date)} يوم — المبلغ{' '}
+                    {formatCurrency(Number(inv.total_amount) - Number(inv.paid_amount))}
+                  </p>
+                </div>
+                <Badge className="bg-amber-500 hover:bg-amber-500">قريبة</Badge>
+              </div>
+            ))}
+            {stats.lowStockProducts.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between gap-4 p-4 rounded-lg bg-orange-50 border border-orange-100"
+              >
+                <div className="flex items-center gap-3">
+                  <Package className="w-4 h-4 text-orange-600 flex-shrink-0" />
+                  <p className="text-sm text-orange-900">
+                    مخزون <span className="font-bold">{p.name}</span> منخفض:{' '}
+                    {p.quantity_on_hand} متبقي (الحد الأدنى {p.minimum_quantity})
+                  </p>
+                </div>
+                <Badge className="bg-orange-500 hover:bg-orange-500">مخزون</Badge>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* حالة فارغة للمستخدم الجديد */}
+      {stats.customersCount === 0 && stats.pendingInvoicesCount === 0 && (
+        <Card className="shadow-sm">
+          <CardContent className="py-16 flex flex-col items-center gap-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Wallet className="w-7 h-7 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-bold text-foreground text-lg">أهلاً بك في سيولة!</h3>
+              <p className="text-muted-foreground text-sm mt-2 max-w-md">
+                ابدأ بإضافة عملائك، ثم سجّل فواتير الآجل، وسيولة هتتابع لك كل حاجة وتنبهك في
+                الوقت المناسب.
+              </p>
+            </div>
+            <div className="flex gap-3 mt-2">
+              <Button asChild>
+                <Link href="/dashboard/customers/new">
+                  <Plus className="w-4 h-4 ml-2" />
+                  أضف أول عميل
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/dashboard/products/new">أضف منتج</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* الفواتير القريبة + الإجراءات السريعة */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Alerts */}
-        <div className="lg:col-span-1">
-          <Card className="border border-border shadow-sm h-full">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold">التنبيهات</CardTitle>
-                <Badge variant="destructive" className="text-xs">٢ تنبيه</Badge>
+        {/* الفواتير القادمة */}
+        <Card className="lg:col-span-2 shadow-sm">
+          <CardHeader className="flex flex-row items-center justify-between pb-4">
+            <CardTitle className="text-base">الفواتير القادمة والمتأخرة</CardTitle>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/dashboard/invoices" className="text-primary">
+                عرض الكل
+                <ArrowLeft className="w-4 h-4 mr-1" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {stats.overdueInvoices.length === 0 && stats.dueSoonInvoices.length === 0 ? (
+              <div className="py-10 text-center text-muted-foreground text-sm">
+                لا توجد فواتير مستحقة قريباً — كل شيء تحت السيطرة
               </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {alerts.map((alert, i) => (
-                <div
-                  key={i}
-                  className={`flex gap-3 p-3 rounded-xl border ${
-                    alert.type === 'danger' ? 'bg-red-50 border-red-200' :
-                    alert.type === 'warning' ? 'bg-amber-50 border-amber-200' :
-                    'bg-emerald-50 border-emerald-200'
-                  }`}
-                >
-                  <alert.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
-                    alert.type === 'danger' ? 'text-red-600' :
-                    alert.type === 'warning' ? 'text-amber-600' :
-                    'text-emerald-600'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-foreground">{alert.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{alert.message}</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">{alert.time}</p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Invoices */}
-        <div className="lg:col-span-2">
-          <Card className="border border-border shadow-sm h-full">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base font-semibold">الفواتير القريبة</CardTitle>
-                  <CardDescription className="text-xs mt-0.5">الفواتير المستحقة خلال الأيام القادمة</CardDescription>
-                </div>
-                <Button variant="ghost" size="sm" asChild className="text-xs text-primary">
-                  <Link href="/dashboard/invoices">
-                    عرض الكل
-                    <ArrowUpRight className="w-3 h-3 mr-1" />
-                  </Link>
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {recentInvoices.map((invoice, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between p-3 rounded-xl bg-muted/40 hover:bg-muted/70 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                        <span className="text-xs font-bold text-primary">{invoice.customer[0]}</span>
+            ) : (
+              <div className="space-y-3">
+                {[...stats.overdueInvoices, ...stats.dueSoonInvoices].slice(0, 6).map((inv) => {
+                  const d = daysUntil(inv.due_date)
+                  const remaining = Number(inv.total_amount) - Number(inv.paid_amount)
+                  return (
+                    <div
+                      key={inv.id}
+                      className="flex items-center justify-between gap-4 p-4 rounded-lg border border-border hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {inv.customers?.name ?? '—'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1" dir="ltr">
+                          {inv.invoice_number}
+                        </p>
                       </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{invoice.customer}</p>
-                        <p className="text-xs text-muted-foreground">{invoice.dueDate}</p>
+                      <div className="text-left flex-shrink-0">
+                        <p className="text-sm font-bold text-foreground">
+                          {formatCurrency(remaining)}
+                        </p>
+                        <p
+                          className={`text-xs mt-1 ${
+                            d < 0 ? 'text-red-600 font-medium' : 'text-muted-foreground'
+                          }`}
+                        >
+                          {d < 0 ? `متأخرة ${Math.abs(d)} يوم` : d === 0 ? 'تستحق اليوم' : `بعد ${d} يوم`}
+                        </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm font-semibold text-foreground">{invoice.amount} ج.م</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${statusConfig[invoice.status as keyof typeof statusConfig].class}`}>
-                        {statusConfig[invoice.status as keyof typeof statusConfig].label}
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link href="/dashboard/customers/new">
-          <Card className="border border-border shadow-sm hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">إضافة عميل</p>
-                <p className="text-xs text-muted-foreground">أضف عميل جديد</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/dashboard/invoices/new">
-          <Card className="border border-border shadow-sm hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
-                <FileText className="w-5 h-5 text-emerald-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">فاتورة جديدة</p>
-                <p className="text-xs text-muted-foreground">سجل بيع آجل</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/dashboard/products/new">
-          <Card className="border border-border shadow-sm hover:shadow-md hover:border-primary/30 transition-all cursor-pointer group">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
-                <Package className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">إضافة منتج</p>
-                <p className="text-xs text-muted-foreground">أضف منتج للمخزون</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+        {/* إجراءات سريعة */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base">إجراءات سريعة</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button variant="outline" className="w-full justify-start h-11" asChild>
+              <Link href="/dashboard/customers/new">
+                <Users className="w-4 h-4 ml-3 text-primary" />
+                إضافة عميل جديد
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full justify-start h-11" asChild>
+              <Link href="/dashboard/invoices/new">
+                <FileText className="w-4 h-4 ml-3 text-primary" />
+                تسجيل فاتورة آجل
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full justify-start h-11" asChild>
+              <Link href="/dashboard/products/new">
+                <Package className="w-4 h-4 ml-3 text-primary" />
+                إضافة منتج للمخزون
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

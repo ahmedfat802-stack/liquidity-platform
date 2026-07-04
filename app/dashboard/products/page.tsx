@@ -1,73 +1,338 @@
 'use client'
-import { useState } from 'react'
+
+/**
+ * =====================================================================
+ * صفحة المنتجات والمخزون — منصة "سيولة"
+ * =====================================================================
+ * - بيانات حقيقية من Supabase عبر lib/data.ts (fetchProducts / deleteProduct)
+ * - 3 كروت إحصائيات: إجمالي المنتجات / منخفضة المخزون / نفذت
+ * - حالة كل منتج: متوفر / منخفض / نفذ (حسب quantity_on_hand vs minimum_quantity)
+ * - بحث بالاسم أو SKU أو التصنيف + حذف مع تأكيد + حالة فارغة
+ * =====================================================================
+ */
+
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { Plus, Search, Package, AlertTriangle, MoreVertical } from 'lucide-react'
+import {
+  Package,
+  Plus,
+  Search,
+  Trash2,
+  Loader2,
+  AlertTriangle,
+  PackageX,
+  PackageMinus,
+} from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { fetchProducts, deleteProduct, type Product } from '@/lib/data'
+import { formatCurrency } from '@/lib/utils'
 
-const mockProducts = [
-  { id: 1, name: 'قماش قطن أبيض', sku: 'FAB-001', price: 45, stock: 120, minStock: 20, unit: 'متر', status: 'ok' },
-  { id: 2, name: 'خيط بوليستر أسود', sku: 'THR-002', price: 8, stock: 5, minStock: 15, unit: 'بكرة', status: 'low' },
-  { id: 3, name: 'أزرار بلاستيك', sku: 'BTN-003', price: 2, stock: 0, minStock: 50, unit: 'حبة', status: 'out' },
-  { id: 4, name: 'قماش جينز', sku: 'FAB-004', price: 65, stock: 80, minStock: 15, unit: 'متر', status: 'ok' },
-  { id: 5, name: 'سحاب معدني', sku: 'ZIP-005', price: 5, stock: 8, minStock: 30, unit: 'حبة', status: 'low' },
-]
-const statusConfig = {
-  ok: { label: 'متوفر', class: 'bg-emerald-100 text-emerald-700 border-emerald-200' },
-  low: { label: 'منخفض', class: 'bg-amber-100 text-amber-700 border-amber-200' },
-  out: { label: 'نفذ', class: 'bg-red-100 text-red-700 border-red-200' },
+/** تصنيف حالة المخزون للمنتج */
+function stockState(p: Product): 'available' | 'low' | 'out' {
+  if (Number(p.quantity_on_hand) === 0) return 'out'
+  if (Number(p.quantity_on_hand) <= Number(p.minimum_quantity)) return 'low'
+  return 'available'
 }
+
 export default function ProductsPage() {
-  const [search, setSearch] = useState('')
-  const filtered = mockProducts.filter(p => p.name.includes(search) || p.sku.includes(search))
-  const lowStock = mockProducts.filter(p => p.status === 'low' || p.status === 'out').length
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchProducts().then(({ data, error }) => {
+      setProducts(data ?? [])
+      setError(error)
+      setLoading(false)
+    })
+  }, [])
+
+  /** حذف منتج بعد التأكيد */
+  const handleDelete = async (id: string) => {
+    setBusyId(id)
+    const { error } = await deleteProduct(id)
+    if (!error) setProducts((prev) => prev.filter((p) => p.id !== id))
+    setBusyId(null)
+  }
+
+  const stats = useMemo(
+    () => ({
+      total: products.length,
+      low: products.filter((p) => stockState(p) === 'low').length,
+      out: products.filter((p) => stockState(p) === 'out').length,
+    }),
+    [products]
+  )
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return products
+    return products.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.sku ?? '').toLowerCase().includes(q) ||
+        (p.category ?? '').toLowerCase().includes(q)
+    )
+  }, [products, query])
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground text-sm">جاري تحميل المنتجات...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-32 gap-4">
+        <AlertTriangle className="w-8 h-8 text-destructive" />
+        <p className="text-muted-foreground">حدث خطأ: {error}</p>
+        <Button onClick={() => location.reload()}>إعادة المحاولة</Button>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-foreground">المنتجات</h1><p className="text-muted-foreground text-sm mt-0.5">{mockProducts.length} منتج مسجل</p></div>
-        <Button asChild className="gap-2 shadow-sm"><Link href="/dashboard/products/new"><Plus className="w-4 h-4" />منتج جديد</Link></Button>
+    <div className="space-y-8">
+      {/* العنوان */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">المنتجات والمخزون</h1>
+          <p className="text-muted-foreground mt-1.5 text-sm">
+            تابع مخزونك وسيولة هتنبهك لما أي منتج يقرب يخلص
+          </p>
+        </div>
+        <Button asChild>
+          <Link href="/dashboard/products/new">
+            <Plus className="w-4 h-4 ml-2" />
+            منتج جديد
+          </Link>
+        </Button>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border border-border shadow-sm"><CardContent className="p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center"><Package className="w-5 h-5 text-blue-600" /></div><div><p className="text-xl font-bold">{mockProducts.length}</p><p className="text-xs text-muted-foreground">إجمالي المنتجات</p></div></CardContent></Card>
-        <Card className="border border-border shadow-sm"><CardContent className="p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-amber-600" /></div><div><p className="text-xl font-bold">{lowStock}</p><p className="text-xs text-muted-foreground">تحتاج تخزين</p></div></CardContent></Card>
-        <Card className="border border-border shadow-sm"><CardContent className="p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center"><Package className="w-5 h-5 text-emerald-600" /></div><div><p className="text-xl font-bold">{mockProducts.filter(p => p.status === 'ok').length}</p><p className="text-xs text-muted-foreground">متوفر بكمية كافية</p></div></CardContent></Card>
+
+      {/* كروت الإحصائيات */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        <Card className="shadow-sm">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center">
+              <Package className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">إجمالي المنتجات</p>
+              <p className="text-2xl font-bold text-foreground mt-0.5">{stats.total}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center">
+              <PackageMinus className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">مخزون منخفض</p>
+              <p className="text-2xl font-bold text-amber-600 mt-0.5">{stats.low}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="w-11 h-11 rounded-xl bg-red-50 flex items-center justify-center">
+              <PackageX className="w-5 h-5 text-red-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">منتجات نفذت</p>
+              <p className="text-2xl font-bold text-red-600 mt-0.5">{stats.out}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
-      <div className="relative"><Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" /><Input placeholder="ابحث باسم المنتج أو الكود..." value={search} onChange={(e) => setSearch(e.target.value)} className="pr-10 h-11 bg-card" /></div>
-      <div className="space-y-3">
-        {filtered.length === 0 ? (
-          <Card className="border border-border"><CardContent className="p-12 text-center"><Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" /><p className="text-muted-foreground">لا توجد منتجات</p></CardContent></Card>
-        ) : filtered.map((product) => (
-          <Card key={product.id} className={`border shadow-sm hover:shadow-md transition-all ${product.status === 'out' ? 'border-red-200 bg-red-50/30' : product.status === 'low' ? 'border-amber-200 bg-amber-50/30' : 'border-border'}`}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-4">
-                <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"><Package className="w-5 h-5 text-primary" /></div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-foreground text-sm">{product.name}</p>
-                    <Badge variant="outline" className={`text-xs ${statusConfig[product.status as keyof typeof statusConfig].class}`}>{statusConfig[product.status as keyof typeof statusConfig].label}</Badge>
+
+      {/* البحث */}
+      {products.length > 0 && (
+        <div className="relative max-w-md">
+          <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="ابحث بالاسم أو الكود أو التصنيف..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="h-11 pr-10"
+          />
+        </div>
+      )}
+
+      {/* القائمة */}
+      {filtered.length === 0 ? (
+        <Card className="shadow-sm">
+          <CardContent className="py-16 flex flex-col items-center gap-4 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Package className="w-7 h-7 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-bold text-foreground">
+                {products.length === 0 ? 'لا توجد منتجات بعد' : 'لا توجد نتائج للبحث'}
+              </h3>
+              <p className="text-muted-foreground text-sm mt-2">
+                {products.length === 0
+                  ? 'أضف منتجاتك لتتابع المخزون وتوصلك تنبيهات قبل ما يخلص'
+                  : 'جرّب كلمة بحث مختلفة'}
+              </p>
+            </div>
+            {products.length === 0 && (
+              <Button asChild className="mt-2">
+                <Link href="/dashboard/products/new">
+                  <Plus className="w-4 h-4 ml-2" />
+                  منتج جديد
+                </Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+          {filtered.map((p) => {
+            const state = stockState(p)
+            return (
+              <Card key={p.id} className="shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-6 space-y-4">
+                  {/* رأس الكارت */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          state === 'available'
+                            ? 'bg-emerald-50'
+                            : state === 'low'
+                            ? 'bg-amber-50'
+                            : 'bg-red-50'
+                        }`}
+                      >
+                        <Package
+                          className={`w-5 h-5 ${
+                            state === 'available'
+                              ? 'text-emerald-600'
+                              : state === 'low'
+                              ? 'text-amber-600'
+                              : 'text-red-600'
+                          }`}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground truncate">{p.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5" dir="ltr">
+                          {p.sku || '—'}
+                        </p>
+                      </div>
+                    </div>
+                    {state === 'available' && (
+                      <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 flex-shrink-0">
+                        متوفر
+                      </Badge>
+                    )}
+                    {state === 'low' && (
+                      <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 flex-shrink-0">
+                        منخفض
+                      </Badge>
+                    )}
+                    {state === 'out' && (
+                      <Badge variant="destructive" className="flex-shrink-0">
+                        نفذ
+                      </Badge>
+                    )}
                   </div>
-                  <p className="text-xs text-muted-foreground">كود: {product.sku} · الحد الأدنى: {product.minStock} {product.unit}</p>
-                </div>
-                <div className="text-left flex-shrink-0">
-                  <p className={`text-base font-bold ${product.stock === 0 ? 'text-red-600' : product.stock < product.minStock ? 'text-amber-600' : 'text-foreground'}`}>{product.stock} {product.unit}</p>
-                  <p className="text-xs text-muted-foreground">{product.price} ج.م / {product.unit}</p>
-                </div>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="w-8 h-8 flex-shrink-0"><MoreVertical className="w-4 h-4" /></Button></DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem>تحديث المخزون</DropdownMenuItem>
-                    <DropdownMenuItem>تعديل</DropdownMenuItem>
-                    <DropdownMenuItem className="text-destructive">حذف</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+
+                  {/* التفاصيل */}
+                  <div className="grid grid-cols-3 gap-3 py-3 border-y border-border">
+                    <div>
+                      <p className="text-xs text-muted-foreground">السعر</p>
+                      <p className="font-bold text-foreground text-sm mt-1">
+                        {formatCurrency(Number(p.price))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">الكمية</p>
+                      <p
+                        className={`font-bold text-sm mt-1 ${
+                          state === 'available'
+                            ? 'text-foreground'
+                            : state === 'low'
+                            ? 'text-amber-600'
+                            : 'text-red-600'
+                        }`}
+                      >
+                        {p.quantity_on_hand}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">الحد الأدنى</p>
+                      <p className="font-bold text-foreground text-sm mt-1">
+                        {p.minimum_quantity}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* التصنيف + الحذف */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {p.category ? `التصنيف: ${p.category}` : 'بدون تصنيف'}
+                    </span>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-muted-foreground hover:text-destructive h-8"
+                          disabled={busyId === p.id}
+                        >
+                          {busyId === p.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent dir="rtl">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>حذف المنتج &quot;{p.name}&quot;؟</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            سيتم حذف المنتج نهائياً ولن يمكن استرجاعه.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>إلغاء</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive hover:bg-destructive/90"
+                            onClick={() => handleDelete(p.id)}
+                          >
+                            حذف نهائياً
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
