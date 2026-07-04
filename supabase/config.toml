@@ -1,0 +1,58 @@
+# Supabase Configuration
+
+[project]
+# Project name
+name = "liquidity-platform"
+
+# Project ID (will be set by Supabase)
+# project_id = "your-project-id"
+
+# Database settings
+[db]
+# Port for local development
+port = 5432
+# Shadow database for migrations
+shadow_database_url = "postgresql://postgres:postgres@localhost:54322/postgres"
+
+# API settings
+[api]
+# Port for local API
+port = 54321
+# Enable CORS
+enabled = true
+
+# Auth settings
+[auth]
+# Enable email auth
+enabled = true
+# Email templates
+email_templates_dir = "./supabase/templates"
+
+# Storage settings
+[storage]
+# File size limit (in bytes)
+file_size_limit = 52428800 # 50MB
+# Allowed MIME types
+allowed_mime_types = ["image/jpeg", "image/png", "image/gif", "application/pdf"]
+
+# Realtime settings
+[realtime]
+# Enable realtime
+enabled = true
+# Max connections
+max_connections = 1000
+
+# Vector settings
+[vector]
+# Enable vector
+enabled = false
+
+# Logging
+[logging]
+# Log level
+level = "info"
+
+# Analytics
+[analytics]
+# Enable analytics
+enabled = true
